@@ -1,0 +1,189 @@
+/**
+*
+*    The format of the fields request parameter value is loosely based on XPath syntax.
+*    The supported syntax is summarized below, and additional examples are provided in the following section.
+*
+*    * Use a comma-separated list to select multiple fields.
+*
+*    * Use a/b to select a field b that is nested within field a; use a/b/c to select a field c nested within b.
+*      Exception: For API responses that use "data" wrappers, where the response is nested within a data object
+*      that looks like data: { ... }, do not include "data" in the fields specification. Including the data object
+*      with a fields specification like data/a/b causes an error. Instead, just use a fields specification like a/b.
+*
+*    * Use a sub-selector to request a set of specific sub-fields of arrays or objects by placing expressions in parentheses "( )".
+*      For example: fields=items(id,author/email) returns only the item ID and author's email for each element in the items array.
+*      You can also specify a single sub-field, where fields=items(id) is equivalent to fields=items/id.
+*
+*    * Use wildcards in field selections, if needed.
+*      For example: fields=items/pagemap/* selects all objects in a pagemap.
+*
+*/
+{
+
+package fieldmask
+
+// Masks extracts the field masks from the given query
+func Masks(q string) ([][]string, error) {
+	got, err := Parse("TestMaskQueries", []byte(q))
+	if err != nil {
+		return [][]string{}, err
+	}
+	return got.([][]string), err
+}
+
+type mask interface {
+	paths() [][]string
+}
+
+type termMask struct {
+	name []string
+}
+
+func (t termMask) paths() [][]string {
+	return [][]string{t.name}
+}
+
+type termGroup struct {
+	name []string
+	masks []mask
+}
+
+func (t termGroup) paths() [][]string {
+	var masks [][]string
+	for _, m := range t.masks {
+		for _, p := range m.paths() {
+		    v := append([]string{}, t.name...)
+			masks = append(masks, append(append(v, p...)))
+		}
+	}
+	return masks
+}
+
+type termArray struct {
+	masks []mask
+}
+
+func (t termArray) paths() [][]string {
+	var masks [][]string
+	for _, m := range t.masks {
+		masks = append(masks, m.paths()...)
+	}
+	return masks
+}
+
+func toFlatSlice(arr []interface{}) interface{} {
+	if len(arr) == 1 {
+		return arr[0]
+	}
+	return arr
+}
+
+func toIfaceStr(v interface{}) string {
+	if v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	if s, ok := v.([]byte); ok {
+		return string(s)
+	}
+	return ""
+}
+
+func toIfaceSlice(v interface{}) []interface{} {
+	if v == nil {
+		return nil
+	}
+	return v.([]interface{})
+}
+
+}
+
+Masks = val: Value EOF {
+    return val.(mask).paths(), nil
+}
+
+Value = val:( TermArray / TermValue) _ {
+    return val, nil
+}
+
+WildCard = '*'
+
+Identifier = [^: \t\r\n)(/,]+ {
+    return string(c.text), nil
+}
+
+TermPath = QuotedTerm / Identifier / WildCard
+
+Path = id:TermPath _ vals:('/'_ TermPath _ )+ {
+   names := []string{toIfaceStr(id)}
+   for _, v := range toIfaceSlice(vals) {
+       sl := toIfaceSlice(v)
+       names = append(names, strings.Replace(sl[2].(string), " ", "", -1))
+   }
+   return names, nil
+}
+
+Term
+= _ id:(QuotedTerm / Identifier) _ vals:('/' _ TermPath _ )* {
+    valsSl := toIfaceSlice(vals)
+    if len(valsSl) == 0 {
+       return termMask{name: []string{strings.Replace(toIfaceStr(id), " ", "", -1)}}, nil
+    }
+    names := []string{strings.Replace(toIfaceStr(id), " ", "", -1)}
+    for _, v := range valsSl {
+        vSl := toIfaceSlice(v)
+        names = append(names, strings.Replace(vSl[2].(string), " ", "", -1))
+    }
+    return termMask{name: names}, nil
+}
+
+
+TermValue = TermGroup /  Term
+
+TermGroup
+= _ key:(Path / QuotedTerm / Identifier) _ '(' _ vals:(TermArray / TermValue) _ ')' {
+    var names []string
+    if v, ok := key.([]string); ok {
+        names = v
+    } else {
+        names = []string{toIfaceStr(key)}
+    }
+    return termGroup{
+        name: names,
+        masks: []mask{ vals.(mask)},
+    }, nil
+}
+
+TermArray
+= vals:(TermValue _ (',' _ TermValue)+) {
+    valsSl := toIfaceSlice(vals)
+    if len(valsSl) == 0 {
+        return []interface{}{}, nil
+    }
+    res := []mask{valsSl[0].(mask)}
+    restSl := toIfaceSlice(valsSl[2])
+    for _, v := range restSl {
+        vSl := toIfaceSlice(v)
+        res = append(res, vSl[2].(mask))
+    }
+    return termArray{masks: res}, nil
+}
+
+EscapedChar <- [\x00-\x1f"\\]
+
+EscapeSequence <- SingleCharEscape / UnicodeEscape
+
+SingleCharEscape <- ["\\/bfnrt]
+
+QuotedTerm
+  = '"' (!EscapedChar . / '\\' EscapeSequence)* '"'
+    {
+        c.text = bytes.Replace(c.text, []byte(`\/`), []byte(`/`), -1)
+        return strconv.Unquote(string(c.text))
+    }
+
+_ "whitespace" = [ \t\r\n]*
+
+EOF = !.

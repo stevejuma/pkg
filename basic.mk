@@ -168,6 +168,7 @@ vendor: ## Updates the vendoring directory.
 .PHONY: grammar
 grammar: ## Generates the go code from the PEG grammars
 	pigeon ./lucenequery/lucene_query.grammar | goimports > ./lucenequery/parser.go
+	pigeon ./fieldmask/field_mask.grammar | goimports > ./fieldmask/fieldmask.go
 
 .PHONY: deps
 deps: ## Installs build/test dependencies

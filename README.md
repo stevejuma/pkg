@@ -6,3 +6,9 @@
 
 A home for various Go packages to be imported by other projects.
 
+## Libraries 
+
+ * [lucenequery](./lucenequery)
+   * A Go parser for the lucene query language syntax
+ * [fieldmask](./fieldmask)
+   * A Go parser for partial response field mask queries loosely based on XPath
