@@ -10,5 +10,7 @@ A home for various Go packages to be imported by other projects.
 
  * [lucenequery](./lucenequery)
    * A Go parser for the lucene query language syntax
+   * [lucenequery/sql](./lucenequery/sql)
+      * A SQL code generator from the lucene query syntax
  * [fieldmask](./fieldmask)
    * A Go parser for partial response field mask queries loosely based on XPath
