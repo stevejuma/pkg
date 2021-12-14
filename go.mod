@@ -1,4 +1,4 @@
-module pkg
+module github.com/stevejuma/pkg
 
 go 1.17
 
