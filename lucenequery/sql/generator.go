@@ -3,7 +3,7 @@ package sql
 import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
-	"pkg/lucenequery"
+	"github.com/stevejuma/pkg/lucenequery"
 	"regexp"
 	"strings"
 )
